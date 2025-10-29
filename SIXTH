@@ -1,0 +1,215 @@
+1. Entity Classes
+🔹 Account.java
+package com.example.bank.entity;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "accounts")
+public class Account {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
+
+    @Column(nullable = false)
+    private String name;
+
+    private double balance;
+
+    public Account() {}
+
+    public Account(String name, double balance) {
+        this.name = name;
+        this.balance = balance;
+    }
+
+    // Getters and Setters
+    public int getId() { return id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public double getBalance() { return balance; }
+    public void setBalance(double balance) { this.balance = balance; }
+}
+
+🔹 TransactionRecord.java
+package com.example.bank.entity;
+
+import jakarta.persistence.*;
+import java.util.Date;
+
+@Entity
+@Table(name = "transactions")
+public class TransactionRecord {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
+
+    private int fromAccountId;
+    private int toAccountId;
+    private double amount;
+    private Date timestamp;
+
+    public TransactionRecord() {}
+
+    public TransactionRecord(int fromAccountId, int toAccountId, double amount) {
+        this.fromAccountId = fromAccountId;
+        this.toAccountId = toAccountId;
+        this.amount = amount;
+        this.timestamp = new Date();
+    }
+
+    // Getters and Setters
+}
+
+⚙️ 2. Hibernate Configuration (hibernate.cfg.xml)
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-configuration PUBLIC
+    "-//Hibernate/Hibernate Configuration DTD 5.3//EN"
+    "http://hibernate.sourceforge.net/hibernate-configuration-5.3.dtd">
+
+<hibernate-configuration>
+    <session-factory>
+        <property name="hibernate.connection.driver_class">com.mysql.cj.jdbc.Driver</property>
+        <property name="hibernate.connection.url">jdbc:mysql://localhost:3306/bankdb</property>
+        <property name="hibernate.connection.username">root</property>
+        <property name="hibernate.connection.password">yourpassword</property>
+        <property name="hibernate.dialect">org.hibernate.dialect.MySQL8Dialect</property>
+
+        <property name="hibernate.hbm2ddl.auto">update</property>
+        <property name="show_sql">true</property>
+
+        <mapping class="com.example.bank.entity.Account"/>
+        <mapping class="com.example.bank.entity.TransactionRecord"/>
+    </session-factory>
+</hibernate-configuration>
+
+🧩 3. DAO Layer
+🔹 AccountDAO.java
+package com.example.bank.dao;
+
+import com.example.bank.entity.Account;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class AccountDAO {
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    public Account getAccount(int id) {
+        return entityManager.find(Account.class, id);
+    }
+
+    public void updateAccount(Account account) {
+        entityManager.merge(account);
+    }
+}
+
+🧩 4. Service Layer (Transactional Logic)
+🔹 BankService.java
+package com.example.bank.service;
+
+import com.example.bank.dao.AccountDAO;
+import com.example.bank.entity.Account;
+import com.example.bank.entity.TransactionRecord;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class BankService {
+
+    @Autowired
+    private AccountDAO accountDAO;
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    @Transactional
+    public void transferMoney(int fromId, int toId, double amount) {
+        Account from = accountDAO.getAccount(fromId);
+        Account to = accountDAO.getAccount(toId);
+
+        if (from.getBalance() < amount) {
+            throw new RuntimeException("Insufficient funds!");
+        }
+
+        from.setBalance(from.getBalance() - amount);
+        to.setBalance(to.getBalance() + amount);
+
+        accountDAO.updateAccount(from);
+        accountDAO.updateAccount(to);
+
+        TransactionRecord tr = new TransactionRecord(fromId, toId, amount);
+        entityManager.persist(tr);
+
+        System.out.println("Transfer successful: " + amount + " from " + from.getName() + " to " + to.getName());
+    }
+}
+
+💡 5. Configuration Class (Spring + Hibernate Integration)
+🔹 AppConfig.java
+package com.example.bank.config;
+
+import org.springframework.context.annotation.*;
+import org.springframework.orm.hibernate5.HibernateTransactionManager;
+import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+import javax.sql.DataSource;
+import com.zaxxer.hikari.HikariDataSource;
+
+@Configuration
+@ComponentScan(basePackages = "com.example.bank")
+@EnableTransactionManagement
+public class AppConfig {
+
+    @Bean
+    public DataSource dataSource() {
+        HikariDataSource ds = new HikariDataSource();
+        ds.setJdbcUrl("jdbc:mysql://localhost:3306/bankdb");
+        ds.setUsername("root");
+        ds.setPassword("yourpassword");
+        ds.setDriverClassName("com.mysql.cj.jdbc.Driver");
+        return ds;
+    }
+
+    @Bean
+    public LocalContainerEntityManagerFactoryBean entityManagerFactory() {
+        LocalContainerEntityManagerFactoryBean emf = new LocalContainerEntityManagerFactoryBean();
+        emf.setPackagesToScan("com.example.bank.entity");
+        return emf;
+    }
+
+    @Bean
+    public HibernateTransactionManager transactionManager() {
+        return new HibernateTransactionManager();
+    }
+}
+
+🚀 6. Main Class (Test Transaction)
+package com.example.bank;
+
+import com.example.bank.config.AppConfig;
+import com.example.bank.service.BankService;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+public class MainApp {
+    public static void main(String[] args) {
+        AnnotationConfigApplicationContext context =
+                new AnnotationConfigApplicationContext(AppConfig.class);
+
+        BankService bankService = context.getBean(BankService.class);
+
+        try {
+            bankService.transferMoney(1, 2, 1000);
+        } catch (Exception e) {
+            System.out.println("Transaction failed: " + e.getMessage());
+        }
+
+        context.close();
+    }
+}
