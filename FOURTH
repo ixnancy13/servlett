@@ -1,0 +1,80 @@
+1. Course Class (Dependency)
+package com.example.springdemo;
+
+public class Course {
+    private String courseName;
+
+    public Course() {
+        this.courseName = "Spring Framework Basics";
+    }
+
+    public String getCourseName() {
+        return courseName;
+    }
+
+    public void displayCourse() {
+        System.out.println("Enrolled Course: " + courseName);
+    }
+}
+
+👨‍🎓 2. Student Class (Dependent)
+package com.example.springdemo;
+
+public class Student {
+    private Course course; // Dependency
+
+    // Constructor Injection
+    public Student(Course course) {
+        this.course = course;
+    }
+
+    public void showDetails() {
+        System.out.println("Student is enrolled in: " + course.getCourseName());
+    }
+}
+
+⚙️ 3. Java-Based Configuration Class
+
+This replaces the traditional applicationContext.xml.
+
+package com.example.springdemo;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class AppConfig {
+
+    // Define Course bean
+    @Bean
+    public Course course() {
+        return new Course();
+    }
+
+    // Define Student bean and inject Course
+    @Bean
+    public Student student() {
+        return new Student(course());
+    }
+}
+
+🚀 4. Main Class (Testing Dependency Injection)
+package com.example.springdemo;
+
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+public class MainApp {
+    public static void main(String[] args) {
+        // Load Spring context from Java config
+        ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+
+        // Get Student bean
+        Student student = context.getBean(Student.class);
+
+        // Call method to verify DI
+        student.showDetails();
+
+        ((AnnotationConfigApplicationContext) context).close();
+    }
+}
